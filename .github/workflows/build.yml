@@ -1,0 +1,92 @@
+name: HiperLink Build
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types:
+      - Build_HiperLink_Binary
+
+jobs:
+  build_macos:
+    name: Build HiperLink macOS Version
+    runs-on: macos-12
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19.5
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.18.1
+      - name: Install Environment
+        run: |
+          brew update && brew install upx bash
+          go install github.com/wailsapp/wails/v2/cmd/wails@latest
+          go install mvdan.cc/garble@latest
+          npm install -g npm@9.4.0
+      - name: Set up SSH Key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+      - name: Build HiperLink
+        shell: bash
+        run: | 
+          echo $COMMAND_MACOS | awk '{ run=$0; system(run) }'
+        env:
+          COMMAND_MACOS: ${{ secrets.COMMAND_MACOS }}
+          GIT_HOST: ${{ secrets.GIT_HOST }}
+      - uses: actions/upload-artifact@master
+        with:
+          name: HiperLink
+          path: /Users/runner/work/HiperLink-core/HiperLink/build/bin/zip
+
+  build_other:
+    name: Build HiperLink other Version
+    needs: build_macos
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19.5
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.18.1
+      - name: Install Environment
+        run: |
+          sudo apt-get update && sudo apt-get install -y wget curl gcc libgtk-3-dev libwebkit2gtk-4.0-dev pkg-config
+          sudo apt-get remove -y upx
+          wget https://github.com/upx/upx/releases/download/v4.0.1/upx-4.0.1-amd64_linux.tar.xz
+          tar -xf upx-4.0.1-amd64_linux.tar.xz && sudo cp upx-4.0.1-amd64_linux/upx /usr/bin/upx
+          go install github.com/wailsapp/wails/v2/cmd/wails@latest
+          go install mvdan.cc/garble@latest
+          npm install -g npm@9.4.0
+      - name: Set up SSH Key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+      - name: Build HiperLink
+        shell: bash
+        run: echo $COMMAND_OTHER | awk '{ run=$0; system(run) }'
+        env:
+          COMMAND_OTHER: ${{ secrets.COMMAND_OTHER }}
+          GIT_HOST: ${{ secrets.GIT_HOST }}
+          GIT_IP: ${{ secrets.GIT_IP }}
+      - uses: actions/download-artifact@master
+        with:
+          name: HiperLink
+          path: build/bin/zip
+      - run: |
+          cp build/bin/zip/* ../HiperLink/build/bin/zip
+          cd ../HiperLink/build/bin/zip && find . ! -path "*packages.sha1*" -type f -printf "%P " | xargs sha1sum | sort -k 2 > ./packages.sha1
+      - uses: geekyeggo/delete-artifact@v2
+        with:
+          name: HiperLink
+      - name: Release
+        run: cd ../HiperLink && script/release.sh
+        env:
+          GIT_HOST: ${{ secrets.GIT_HOST }}
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
