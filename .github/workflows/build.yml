@@ -38,12 +38,11 @@ jobs:
           GIT_HOST: ${{ secrets.GIT_HOST }}
       - uses: actions/upload-artifact@master
         with:
-          name: HiperLink
+          name: HiperLink-macos
           path: /Users/runner/work/HiperLink-core/HiperLink/build/bin/zip
 
   build_other:
     name: Build HiperLink other Version
-    needs: build_macos
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
@@ -75,18 +74,45 @@ jobs:
           COMMAND_OTHER: ${{ secrets.COMMAND_OTHER }}
           GIT_HOST: ${{ secrets.GIT_HOST }}
           GIT_IP: ${{ secrets.GIT_IP }}
+      - uses: actions/upload-artifact@master
+        with:
+          name: HiperLink-other
+          path: /home/runner/work/HiperLink-core/HiperLink/build/bin/zip
+
+  release:
+    name: Release
+    needs: [build_macos, build_other]
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Set up SSH Key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+      - name: Clone Repository
+        run: echo $COMMAND_RELEASE | awk '{ run=$0; system(run) }'
+        env:
+          COMMAND_RELEASE: ${{ secrets.COMMAND_RELEASE }}
+          GIT_HOST: ${{ secrets.GIT_HOST }}
+          GIT_IP: ${{ secrets.GIT_IP }}
       - uses: actions/download-artifact@master
         with:
-          name: HiperLink
+          name: HiperLink-macos
           path: build/bin/zip
+      - uses: actions/download-artifact@master
+        with:
+          name: HiperLink-other
+          path: ../HiperLink/build/bin/zip
       - run: |
           cp build/bin/zip/* ../HiperLink/build/bin/zip
           cd ../HiperLink/build/bin/zip && find . ! -path "*packages.sha1*" -type f -printf "%P " | xargs sha1sum | sort -k 2 > ./packages.sha1
-      - uses: geekyeggo/delete-artifact@v2
-        with:
-          name: HiperLink
       - name: Release
         run: cd ../HiperLink && script/release.sh
         env:
           GIT_HOST: ${{ secrets.GIT_HOST }}
           GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+      - name: Delete artifact
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          name: |
+            HiperLink-macos
+            HiperLink-other
