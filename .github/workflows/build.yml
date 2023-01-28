@@ -110,6 +110,13 @@ jobs:
         env:
           GIT_HOST: ${{ secrets.GIT_HOST }}
           GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+
+  delete-artifact:
+    name: Delete artifact
+    if: ${{ always() }}
+    needs: [build_macos, build_other, release]
+    runs-on: ubuntu-20.04
+    steps:
       - name: Delete artifact
         uses: geekyeggo/delete-artifact@v2
         with:
